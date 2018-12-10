@@ -1,0 +1,22 @@
+## simple mixture of normals
+
+model {
+    # likelihood bits  
+    for (i in 1:N) {
+    
+      censored_group[i] ~ dinterval(y[i],titers)	 
+      y[i] ~ dnorm( mu[i] , tau ) 
+      mu[i] <- mu_of_cluster[ clust[i] ]
+      clust[i] ~ dcat( p_cluster[1:n_cluster] )
+      
+    }
+    
+    # prior bits
+    tau ~ dgamma( 0.01 , 0.01 )
+    for ( cluster_id in 1: n_cluster ) {
+      mu_of_cluster[cluster_id] ~ dnorm( 0 , 1.0E-10 )
+    }
+    
+    p_cluster[1:n_cluster] ~ ddirch( ones_rep_Nclust )    
+
+}

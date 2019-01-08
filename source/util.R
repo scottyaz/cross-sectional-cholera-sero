@@ -3,7 +3,7 @@
 ## they have been passed along within my util functions for a
 ## while with no attribution so sorry in advance.
 
-wrapper for sending output from function to device
+## wrapper for sending output from function to device
 ##' (note: this is used by to pdf to create pdfs)
 ##' @param expr
 ##' @param dev

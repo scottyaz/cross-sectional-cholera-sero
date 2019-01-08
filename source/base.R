@@ -38,6 +38,8 @@ reload_source <- function(root_path=my_root_path){
     library(scam)
     library(gridExtra)
     library(RColorBrewer)
+    library(pairwiseCI)
+
 
 
     ## setting ggplot theme to be global
@@ -45,7 +47,7 @@ reload_source <- function(root_path=my_root_path){
 
     ## then source code
     source(paste0(my_root_path,"/source/base.R"))
-    source(paste0(my_root_path,"/source/utils.R"))
+    source(paste0(my_root_path,"/source/util.R"))
 
 }
 
@@ -1087,6 +1089,7 @@ make_figure_2 <- function(){
 
     gg <- make_titer_dist_density_plots(assays=c('vibinab','vibogaw'),
                                         exc_lbdays = c(0,270,720))
+
     gg <- gg + xlab("vibriocidal titer") +
     scale_x_continuous(trans="log2",breaks= c(5,10,10*2^(1:20))) +
     theme(axis.ticks = element_blank(), legend.background = element_blank(),
@@ -1309,6 +1312,8 @@ make_figure_4 <- function(refit=FALSE,igm=FALSE){
 ##' @author Andrew A
 make_figure_5 <- function(){
 
+    set.seed(453453)
+
     ## load models
     forest200_two <- readRDS("generated_data/forest200reduced.rds")
     forest100_two <- readRDS("generated_data/forest100reduced.rds")
@@ -1377,7 +1382,9 @@ make_figure_5 <- function(){
     annotate("text", x = 0.2, y = 1.0, size=4,alpha=.75,label=paste0("AUC[200]==",sprintf("%.1f",round(auc_200*100,1))),parse=TRUE)+
     annotate("text", x = 0.35, y = .78, size=4,alpha=.75,label = paste0("AUC[100]==",sprintf("%.1f",round(auc_100*100,1))),parse=TRUE)+
     annotate("text", x = 0.22, y = .6, size=4,alpha=.75,label = paste0("AUC[45]==",sprintf("%.1f",round(auc_45*100,1))),parse=TRUE) +
-    theme(legend.position = c(.75,.21)) + labs(color="Infection Window") +
+    theme(legend.position = c(.75,.21)) +
+    scale_color_brewer(palette="Paired") +
+    labs(color="Infection Window") +
     geom_abline(intercept = 0,alpha=.3,lty=2)-> gg
 
     return(gg)
@@ -2461,9 +2468,9 @@ make_figure_s8 <- function(){
 ##' @author Andrew A
 make_figure_s9 <- function(){
     rc <- scam_and_plot('plpsa_s',
-                        ymax=11,
-                        ybreaks=2:10,
-                        ylabs=2^(2:10))
+                        ymax=log2(200),
+                        ybreaks=2:9,
+                        ylabs=2^(2:9))
 
     return(rc)
 }
@@ -2752,7 +2759,7 @@ make_titer_dist_density_plots <- function(assays=c('vibinab','vibogaw'),
     ylab("Density") +
     geom_rug(data=my_d  %>% filter(comp_type != "'baseline'" & participant=="case"),aes(x=value,color=comp_type),sides="t") +
     ##    geom_rug(data=my_d  %>% filter(comp_type != "'baseline'",participant=="contact"),aes(x=value,color=comp_type),sides="t") +
-    facet_grid(lbday~assay,labeller = as_labeller(assay_names),scales="free_y") +
+    facet_grid(lbday~assay,labeller = as_labeller(assay_names)) + #,scales="free_y") +
     theme(legend.title = element_blank(),
           legend.position = "bottom",
           legend.background = element_rect(fill = "#ffffffaa", colour = NA),
@@ -3066,5 +3073,50 @@ make_aucs_oneg_only <- function(igm = FALSE,
     print(doc, target = target_fn)
 
     print(my_tab)
+
+}
+
+##' Estimates log2 differences of baseline titers
+##' @title
+##' @return
+##' @author Andrew A
+estimate_baseline_titer_diffs <- function(target_fn = "tables/baseline_titer_diffs.docx"){
+
+    dat_l_f <- load_data_for_paper(long=TRUE,full=TRUE,include_igm=TRUE) %>% mutate(u5 = ifelse(age<5,1,0) %>% factor)
+
+    key_assays <- c('vibinab','vibogaw',
+                    'pglsp_s','plpsa_s',
+                    'pgctxb_s','ptctxa_s','plpsm_s')
+
+    u5_diffs <- dat_l_f %>%
+    filter(lbday==2 & assay %in% key_assays & cx %in% c(1,2)) %>% mutate(assay=clean_biomarker_labels(assay)) %>%
+    group_by(assay) %>% dplyr::mutate(l2v=log2(value)) %>%
+    do(w=pairwiseCI(l2v ~ u5, data=data.frame(.),method="Param.diff")) %>%
+    dplyr::summarize(assay,est=w$byout[[1]]$estimate,lower=round(w$byout[[1]]$lower,2),upper=round(w$byout[[1]]$upper,2)) %>%
+    mutate(`under 5` = sprintf("%.2f (%.2f, %.2f)",est,lower,upper))
+
+    ogroup_diffs <- dat_l_f %>%
+    filter(lbday==2 & assay %in% key_assays & cx %in% c(1,2)) %>% mutate(assay=clean_biomarker_labels(assay)) %>%
+    group_by(assay) %>% dplyr::mutate(l2v=log2(value),o_group=factor(o_group)) %>%
+    do(w=pairwiseCI(l2v ~ o_group, data=data.frame(.),method="Median.diff")) %>%
+    dplyr::summarize(assay,est=w$byout[[1]]$estimate,lower=round(w$byout[[1]]$lower,2),upper=round(w$byout[[1]]$upper,2)) %>%
+    mutate(`O blood group` = sprintf("%.2f (%.2f, %.2f)",est,lower,upper))
+
+    sex_diffs <- dat_l_f %>%
+    filter(lbday==2 & assay %in% key_assays & cx %in% c(1,2)) %>% mutate(assay=clean_biomarker_labels(assay)) %>%
+    group_by(assay) %>% dplyr::mutate(l2v=log2(value),sex=factor(sex)) %>%
+    do(w=pairwiseCI(l2v ~ sex, data=data.frame(.),method="Median.diff")) %>%
+    dplyr::summarize(assay,est=w$byout[[1]]$estimate,lower=round(w$byout[[1]]$lower,2),upper=round(w$byout[[1]]$upper,2)) %>%
+    mutate(sex = sprintf("%.2f (%.2f, %.2f)",est,lower,upper))
+
+    my_tab <- full_join(
+        u5_diffs %>% select(assay,`under 5`),
+        ogroup_diffs %>% select(assay,`O blood group`)) %>%
+    full_join(sex_diffs %>% select(assay,sex)) %>% regulartable %>% autofit()
+
+    doc <- read_docx()
+    doc <- body_add_flextable(doc, value = my_tab)
+    print(doc, target = target_fn)
+
 
 }

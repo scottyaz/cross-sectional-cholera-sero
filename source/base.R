@@ -540,7 +540,6 @@ make_roc_varimp_plot <- function(preds,truths,imps,my_title,panel_label="",sub=F
     impplot <- importance_df %>%
     dplyr::mutate(variable1=factor(variable,
                                    levels=sort(unique(importance_df$variable))[levels_vars])) %>%
-    ggplot() +
     geom_bar(aes(x=variable1,y=MeanDecreaseAccuracy,fill=variable),stat='identity',alpha=0.5) +
     coord_flip() + scale_fill_discrete(guide=F) + xlab('') + ylab('relative importance') +
     theme_classic() + theme(axis.title=element_text(size=8),
@@ -944,7 +943,7 @@ scam_and_plot <- function(assay,
 
     print("running scam model with no covaraiates")
 
-    scam1 <- scam(titer ~ s(lbday2,bs="mpd") +
+    scam1 <- scam::scam(titer ~ s(lbday2,bs="mpd") +
                   s(myid,bs="re",by=dum),
                   data = scam_dat)
 
@@ -956,7 +955,10 @@ scam_and_plot <- function(assay,
     fits_1 <- predict(scam1, newdata=testdata_1, type='response', se=T)
     predicts_1 <- data.frame(testdata_1, fits_1) %>%
     mutate(lower = fit - 1.96*se.fit,
-           upper = fit + 1.96*se.fit)
+           upper = fit + 1.96*se.fit,
+           ymax =quantile(dat_baseline$titer,.75,na.rm=T),
+           ymin= quantile(dat_baseline$titer,.25,na.rm=T))
+
 
     gg1 <- ggplot(aes(x=lbday2,y=fit), data=predicts_1) +
     geom_ribbon(aes(ymin = lower, ymax=upper), fill='gray90') +
@@ -968,13 +970,13 @@ scam_and_plot <- function(assay,
     xlab("days from symptom onset") +
     ylab("titer") + theme(legend.title=element_blank())
 
-    ## add alpha rectangle with IQR of enrollement titers for cases
+    ## add alpha rectangle with IQR of enrollment titers for cases
     gg1 <- gg1 +
-      geom_ribbon(ymax=quantile(dat_baseline$titer,.75,na.rm=T),
-                  ymin=quantile(dat_baseline$titer,.25,na.rm=T),fill="grey70",alpha=.2)
+      geom_ribbon(aes(ymax=ymax,ymin=ymin),fill="grey70",alpha=.2)
 
     print("running scam with covariates (by age)")
-    scam2 <- scam(titer ~ s(lbday2,by=u5,bs="mpd") + s(myid,bs="re",by=dum),
+    scam2 <- scam(titer ~ s(lbday2,by=u5,bs="mpd") + 
+                  s(myid,bs="re",by=dum),
                   family=gaussian(link="identity"),
                   data = scam_dat)
 
@@ -999,7 +1001,7 @@ scam_and_plot <- function(assay,
     xlab("days from symptom onset") +
     ylab("titer") + theme(legend.title=element_blank())
 
-    ## need to imlement geom_ribbon for each group here
+    ## need to implement geom_ribbon for each group here
     ribbon_dat <- rbind(
         data.frame(upper=(dat_baseline %>% filter(u5=="under 5 years") %>% summarize(lower=quantile(titer,.75,na.rm=T)) %>% unlist %>% unname),
                    lower=(dat_baseline %>% filter(u5=="under 5 years") %>% summarize(lower=quantile(titer,.25,na.rm=T)) %>% unlist %>% unname),

@@ -8,8 +8,8 @@ my_root_path <- "."
 reload_source <- function(root_path=my_root_path){
 
     cat("sourcing packages and code \n")
-    library(packrat) ## just in case this isn't in .Rprofile
-    packrat::on()
+    #library(packrat) ## just in case this isn't in .Rprofile
+    #packrat::on()
 
     ## first load packages
     library(purrr)
@@ -17,7 +17,6 @@ reload_source <- function(root_path=my_root_path){
     library(plyr)
     library(dplyr)
     library(magrittr)
-    library(plotly)
     library(tidyr)
     library(randomForest)
     library(pander)
@@ -54,14 +53,17 @@ reload_source <- function(root_path=my_root_path){
 
 ## ROCs for cross validated results (multiple)
 make_rocs <- function(preds,truths,k_folds,ribbon=TRUE,title="",annot_auc=TRUE){
+    
     votes <- sapply(preds,function(pred)
         apply(pred$individual,1,function(x) mean(x==1)),simplify=FALSE)
 
     perf_auc <- sapply(1:k_folds,function(x)
         prediction(votes[[x]],truths[[x]]) %>% performance(.,"auc"))
-
+  
+    # get the area under the curve for each fold
     auc <- sapply(perf_auc,function(x) x@y.values[[1]])
 
+    
     perf_roc <- sapply(1:k_folds,function(x) {
         prediction(votes[[x]],truths[[x]]) %>% performance(.,"tpr","fpr")},
         simplify = F)
@@ -524,14 +526,16 @@ make_roc_varimp_plot <- function(preds,truths,imps,my_title,panel_label="",sub=F
 
     my_roc <- make_rocs(preds,truths,length(preds),title=my_title,ribbon=ribbon,...)
 
-    importance_df <- do.call('rbind',imps) %>% as.data.frame()
-
-    importance_df$variable <- rownames(importance_df) %>% pretty_antibody
+    importance_df <- do.call('rbind',imps) %>% as_tibble()
+    varnames <- rownames(do.call('rbind',imps)) %>% pretty_antibody()
+    importance_df$variable <- varnames
+    
+    importance_df <- importance_df %>% group_by(variable) %>% summarise(MeanDecreaseAccuracy=median(MeanDecreaseAccuracy))
 
     levels_vars <- importance_df %>%
-    group_by(variable) %>%
-    dplyr::summarize(med=median(MeanDecreaseAccuracy)) %>%
-    select(med) %>% unlist() %>% order()
+                   group_by(variable) %>%
+                   dplyr::summarise(med=median(MeanDecreaseAccuracy)) %>%
+                   select(med) %>% unlist() %>% order()
 
     impplot <- importance_df %>%
     dplyr::mutate(variable1=factor(variable,
